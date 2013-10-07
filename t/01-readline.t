@@ -31,8 +31,8 @@ ok($z, 'OPEN ok');
 $t = tied *$fh;
 ok($t, '\$fh still tied after open');
 my $u1 = $t->input_record_separator;
-my $u2 = $t->input_record_separator( '12|120|345' );
-ok($u2 eq '12|120|345', 'input record separator regexp correct');
+my $u2 = $t->input_record_separator( qr/12|120|345/ );
+ok($u2 eq '(?^:12|120|345)', 'input record separator regexp correct');
 ok($u1 ne $u2, 'input record separator updated');
 undef $t;
 

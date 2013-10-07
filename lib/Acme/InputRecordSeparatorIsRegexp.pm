@@ -10,7 +10,7 @@ BEGIN {
     *{ 'Acme::IRSRegexp' . "::" } = \*{ __PACKAGE__ . "::" };
 }
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 sub TIEHANDLE {
     my ($pkg, @opts) = @_;
@@ -32,7 +32,23 @@ sub TIEHANDLE {
 	records => [],
 	buffer => ''
     }, $pkg;
+    $self->_compile_rs;
     return $self;
+}
+
+sub _compile_rs {
+    my $self = shift;
+    my $rs = $self->{rs};
+
+    my $q = eval { my @q = split /(?<=${rs})/; 1 };
+    if ($q) {
+	$self->{rsc} = qr/(?<=${rs})/;
+	$self->{can_use_lookbehind} = 1;
+    } else {
+	$self->{rsc} = qr/(.*?(?:${rs}))/;
+	$self->{can_use_lookbehind} = 0;
+    }
+    return;
 }
 
 sub READLINE {
@@ -42,13 +58,21 @@ sub READLINE {
 	$self->{buffer} .= readline($self->{handle});
 	push @{$self->{records}}, $self->_split;
 	$self->{buffer} = "";
-	return splice @{$self->{records}};
+	my @rec = splice @{$self->{records}};
+	if (@rec && $self->{autochomp}) {
+	    $self->chomp( @rec );
+	}
+	return @rec;
     }
     # want scalar
     if (!@{$self->{records}}) {
 	$self->_populate_buffer;
     }
-    return shift @{$self->{records}};
+    my $rec = shift @{$self->{records}};
+    if (defined($rec) && $self->{autochomp}) {
+	$self->chomp( $rec );
+    }
+    return $rec;
 }
 
 sub _populate_buffer {
@@ -56,7 +80,7 @@ sub _populate_buffer {
     my $handle = $self->{handle};
     return if !$handle || eof($handle);
     
-    my $rs = $self->{rs};
+#    my $rs = $self->{rsc} || $self->{rs};
     my @rec;
     {
 	my $buffer = '';
@@ -87,19 +111,14 @@ sub EOF {
 
 sub _split {
     my $self = shift;
-    my $rs = $self->{rs};
-    my @rec;
     if (!defined $self->{can_use_lookbehind}) {
-	# if the record separator does not have a variable length,
-	# we can use lookbehind with the split function
-	my $q = eval { my @q=split /(?<=$rs)/, ""; 1 };
-	$self->{can_use_lookbehind} = $q ? 1 : 0;
+	$self->_compile_rs;
     }
+    my $rs = $self->{rsc};
+    my @rec = split $rs, $self->{buffer};
     if ($self->{can_use_lookbehind}) {
-	my @rec = split /(?<=$rs)/, $self->{buffer};
 	return @rec;
     } else {
-	my @rec = split /(.*?(?:$rs))/, $self->{buffer};
 	return grep length, @rec;
     }
 }
@@ -136,6 +155,7 @@ sub input_record_separator {
 	$self->{rs} = shift;
 	delete $self->{can_use_lookbehind};
     }
+    $self->_compile_rs;
     return $self->{rs};
 }
 
@@ -288,8 +308,22 @@ sub open {
     return $fh;
 }
 
+sub chomp {
+    my $self = shift;
+    my $removed = 0;
+    my $rs = $self->{rs};
+    foreach my $line (@_) {
+	$line =~ s/($rs)$//;
+	if (defined($1)) {
+	    $removed += length($1);
+	}
+    }
+    return $removed;
+}
+
 1; # 
 
+__END__
 
 =head1 NAME
 
@@ -298,7 +332,7 @@ better at something.
 
 =head1 VERSION
 
-Version 0.01
+Version 0.02
 
 =head1 SYNOPSIS
 
@@ -312,7 +346,7 @@ Version 0.01
     }
 
     # tie-then-open
-    tie *{$fh=Symbol::gensym}, 'Acme::IRSRegExp', '\r\n|[\r\n]';
+    tie *{$fh=Symbol::gensym}, 'Acme::IRSRegExp', qr/\r\n|[\r\n]/;
     open $fh, '<', 'file-with-ambiguous-line-endings';
     $line = <$fh>;
 
@@ -363,7 +397,10 @@ A typical use of this package might look like
     tie *$fh, 'Acme::InputRecordSeparatorIsRegexp', $record_sep_regex;
     open $fh, '<', $filename;
 
-where C<$record_sep_regexp> is a string containing the regular expression
+where C<$record_sep_regexp> is a string or a C<Regexp> object 
+(specified with the 
+L<< C<qr/.../>|"Quote and quote-like operators"/perlop >> notation)
+containing the regular expression
 you want to use for a file's line endings. Also see the convenience
 method L<"open"> for an alternate way to obtain a filehandle with
 the features of this package.
@@ -383,10 +420,35 @@ C<tie *HANDLE, 'Acme::InputRecordSeparatorIsRegexp'>.
 
 =head2 input_record_separator
 
-    my $rs = (tied *$fh)->input_record_separator;
+    my $rs = (tied *$fh)->input_record_separator();
     (tied *$fh)->input_record_separator($new_record_separator);
 
 Get or set the input record separator used for this tied filehandle.
+The argument, if provided, can be a string or a C<Regexp> object.
+
+=head2 chomp
+
+    my $chars_removed = (tied *$fh)->chomp($line_from_fh);
+    my $chars_removed = (tied *$fh)->chomp(@lines_from_fh);
+
+Like the builtin L<< C<chomp>|"chomp"/perlvar >> function,
+but removes the trailing string from lines that correspond to
+the file handle's custom input record separator regular
+expression instead of C<$/>. Like the builtin C<chomp>,
+returns the total number of characters removed from
+all its arguments. See also L<"autochomp">.
+
+=head2 autochomp
+
+    my $ac = (tied *$fh)->autochomp;
+    (tied *$fh)->autochomp($boolean);
+
+Gets or sets the autochomp attribute of the filehandle.
+If this attribute is set to a true value, readline 
+operations on this filehandle will return records with
+the record separators removed.
+
+The default value of this attribute is false.
 
 =head1 INTERNALS
 
@@ -442,7 +504,6 @@ automatically be notified of progress on your bug as I make changes.
 You can find documentation for this module with the perldoc command.
 
     perldoc Acme::InputRecordSeparatorIsRegexp
-
 
 You can also look for information at:
 
@@ -514,8 +575,6 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 =cut
 
-__END__
-
 members
 
     handle           => *
@@ -525,7 +584,7 @@ members
     bufsize          => $
   X maxrecsize       => $
 
-  ? autochomp        => bool
+    autochomp        => bool
 
 private methods
 
@@ -583,5 +642,8 @@ test data:
 
 TO DO:
 
-    let  rs  be a real regexp
-    implement autochomp, chomp method
+_X_ let  rs  be a real regexp
+    implement autochomp method
+	implement chomp first
+	call chomp on results as you return them
+    implement chomp method

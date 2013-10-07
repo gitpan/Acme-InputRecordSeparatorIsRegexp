@@ -12,6 +12,11 @@ ok(tied(*$fh), 'tie ok');
 my $z = open $fh, '+>', 't/test05.txt';
 ok($z, 'open +> ok') or diag $!;
 
+# binmode on this filehandle will make these tests work on MSWin32
+$z = binmode $fh;
+ok($z, 'binmode ok');
+
+
 for (1..4) {
     $z = print $fh "x" x 99, "\r";
     ok($z, "print x $_ ok");
