@@ -32,7 +32,9 @@ $t = tied *$fh;
 ok($t, '\$fh still tied after open');
 my $u1 = $t->input_record_separator;
 my $u2 = $t->input_record_separator( qr/12|120|345/ );
-ok($u2 eq '(?^:12|120|345)', 'input record separator regexp correct');
+ok($u2 eq '(?^:12|120|345)' ||       # $] >= 5.014
+   $u2 eq '(?-xism:12|120|345)',     # $] <  5.014
+   'input record separator regexp correct');
 ok($u1 ne $u2, 'input record separator updated');
 undef $t;
 

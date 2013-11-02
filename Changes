@@ -7,4 +7,7 @@ Revision history for Acme-InputRecordSeparatorIsRegexp
 	Allow a qr// expression to be used to specify the record separator.
 	Add  chomp  method and  autochomp  attribute/feature
 
+0.03	2013-11-01
+	<v5.14 compatibility changes in t/01
+	bug fix to allow look-behinds to be used sometimes
 

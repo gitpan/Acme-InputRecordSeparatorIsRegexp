@@ -10,7 +10,7 @@ BEGIN {
     *{ 'Acme::IRSRegexp' . "::" } = \*{ __PACKAGE__ . "::" };
 }
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 sub TIEHANDLE {
     my ($pkg, @opts) = @_;
@@ -40,7 +40,7 @@ sub _compile_rs {
     my $self = shift;
     my $rs = $self->{rs};
 
-    my $q = eval { my @q = split /(?<=${rs})/; 1 };
+    my $q = eval { my @q = split /(?<=${rs})/,""; 1 };
     if ($q) {
 	$self->{rsc} = qr/(?<=${rs})/;
 	$self->{can_use_lookbehind} = 1;
@@ -327,12 +327,11 @@ __END__
 
 =head1 NAME
 
-Acme::InputRecordSeparatorIsRegexp - Actually, awk doesn't have to be 
-better at something.
+Acme::InputRecordSeparatorIsRegexp - awk doesn't have to be better at something.
 
 =head1 VERSION
 
-Version 0.02
+Version 0.03
 
 =head1 SYNOPSIS
 

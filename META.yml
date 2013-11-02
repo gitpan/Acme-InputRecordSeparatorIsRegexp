@@ -1,5 +1,5 @@
 ---
-abstract: "Actually, awk doesn't have to be "
+abstract: "awk doesn't have to be better at something."
 author:
   - "Marty O'Brien <mob@cpan.org>"
 build_requires:
@@ -19,4 +19,4 @@ no_index:
     - inc
 requires:
   perl: 5.006
-version: 0.02
+version: 0.03
